@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="./bootstrap3.4/css/bootstrap.css">
+
+    <style>
+        .nav-tabs {
+            display: flex;
+            justify-content: center;
+        }
+
+        .tab-pane {
+            padding: 20px;
+        }
+
+        .media-list span {
+            float: right;
+            color: #4080f7;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main">
+        <ul class="nav nav-tabs" role="tablist">
+            <li role="presentation"><a href="#reflection" role="tab" data-toggle="tab">反射型xss</a></li>
+            <li role="presentation"><a href="#storage" aria-controls="storage" role="tab" data-toggle="tab">存储型xss</a>
+            </li>
+            <li role="presentation"><a href="#dom" aria-controls="dom" role="tab" data-toggle="tab">dom 型 xss</a></li>
+        </ul>
+
+        <div class="tab-content">
+            <div role="tabpanel" class="tab-pane" id="reflection">
+                <div class="col-lg-6">
+                    <div class="input-group">
+                        <input id="reflection-ipt" type="text" class="form-control" placeholder="你最喜欢做的事是什么？">
+                        <span class="input-group-btn">
+                            <button id="reflection-btn" class="btn btn-default" type="button">提交</button>
+                        </span>
+                    </div><!-- /input-group -->
+                    <p class="like-p">你最喜欢的事情是：</p>
+                </div><!-- /.col-lg-6 -->
+            </div>
+
+            <div role="tabpanel" class="tab-pane" id="storage">
+                <div class="input-group">
+                    <input id="storage-ipt" type="text" class="form-control" placeholder="">
+                    <span class="input-group-btn">
+                        <button id="storage-btn" class="btn btn-default" type="button">提交</button>
+                    </span>
+                </div><!-- /input-group -->
+
+                <ul class="media-list">
+                    <ul class="list-group">
+
+                    </ul>
+            </div>
+
+            <div role="tabpanel" class="tab-pane" id="dom">
+                <div class="input-group">
+                    <input id="dom-ipt" type="text" class="form-control" placeholder="">
+                    <span class="input-group-btn">
+                        <button id="dom-btn" class="btn btn-default" type="button">提交</button>
+                    </span>
+                </div>
+
+                <div id="dom-box">
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="./jquery3.7/jquery-3.7.1.js"></script>
+    <script src="./bootstrap3.4/js/bootstrap.js"></script>
+
+    <script>
+        const queryStringToObject = (queryString) => {
+            const params = new URLSearchParams(queryString);
+            const obj = {};
+
+            for (const [key, value] of params.entries()) {
+                obj[key] = value;
+            }
+
+            return obj;
+        };
+
+        class HistoryStorage {
+            static setItem(key, value) {
+                localStorage.setItem(
+                    key,
+                    JSON.stringify(value),
+                );
+            }
+
+            static getItem(key) {
+                const _res = localStorage.getItem(key);
+                if (!_res) return _res;
+                const value = JSON.parse(_res);
+                return value;
+            }
+
+            static delete(key) {
+                localStorage.removeItem(key);
+            }
+
+            static clear() {
+                localStorage?.clear();
+            }
+        }
+
+        const remakeLocation = () => {
+            location.href = location.href.split("?")[0]
+            return location.hash;
+        };
+
+        // 模拟服务器设置的 cookie
+        ; (() => {
+            document.cookie = "password=pwdaaa123;"
+            document.cookie = "username=zs;"
+        })();
+
+        // 模拟服务器获取 评论列表
+        ; (() => {
+            const arr = [{
+                user: 'zs',
+                msg: "今天天气真好"
+            }, {
+                user: 'ls',
+                msg: "今天太阳真大"
+            }]
+
+            if (!HistoryStorage.getItem("messageList")?.length) {
+                HistoryStorage.setItem("messageList", arr);
+            }
+        })();
+
+        ; (() => {
+            location.hash = location.hash ? location.hash : "#reflection"
+
+            $(`a[href='${location.hash.split("?")[0]}']`).click()
+
+            $("a[role='tab']").click((e) => location.href = e.target.href)
+        })();
+
+        // 反射型
+        ; (() => {
+            const str = $(".like-p").html()
+
+            const init = () => {
+                const params = queryStringToObject(location.hash.split("#reflection")[1])
+
+                if (!params.like) return;
+                $(".like-p").html(`
+                    ${str + params.like}
+                `);
+
+                $('#reflection-ipt').val(params.like)
+            }
+
+            init();
+
+            $("#reflection-btn").click(() => {
+                remakeLocation();
+                location.href = `${location.href}?like=${$('#reflection-ipt').val()}`
+                init();
+            })
+        })();
+
+        // 存储型
+        ; (() => {
+            const init = () => {
+                const messageList = HistoryStorage.getItem("messageList")
+
+                $(".list-group").html(`
+                    ${messageList.map((v, i) => {
+
+                    return (
+                        `<li class="list-group-item">
+                                ${v.user}: ${v.msg}
+                                <span data-del="${i}" class="list-delete">
+                                    删除
+                                </span>
+                            </li>`
+                    )
+                }).join("")}
+`)
+
+                $(".list-delete").click((e) => {
+                    const idx = e.target.getAttribute("data-del")
+
+                    console.log(messageList);
+
+                    messageList.splice(idx, 1)
+                    HistoryStorage.setItem("messageList", messageList);
+                    init();
+                })
+            }
+
+            $("#storage-btn").click(() => {
+                const val = $("#storage-ipt").val()
+                if (!val) return;
+
+                const messageList = HistoryStorage.getItem("messageList")
+                messageList.push({
+                    user: "test",
+                    msg: val
+                })
+
+                HistoryStorage.setItem("messageList", messageList);
+                init();
+
+                $("#storage-ipt").val("")
+            })
+
+            init();
+        })();
+
+        ; (() => {
+            $("#dom-btn").click(() => {
+                const val = $("#dom-ipt").val()
+
+                const a = `<a href="${val}">点击我？</a>`
+                $("#dom-box").html(a)
+
+                $("#dom-ipt").val("");
+            })
+
+        })();
+    </script>
+</body>
+
+</html>
